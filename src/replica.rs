@@ -46,6 +46,7 @@ use crate::*;
 ///
 /// Basically, you tell your `Replica` how your buffer changes, and it tells
 /// you how your buffer *should* change when receiving remote edits.
+#[derive(Debug)]
 pub struct Replica {
     /// The unique identifier of this replica.
     id: ReplicaId,
@@ -793,25 +794,25 @@ impl Replica {
     }
 }
 
-impl core::fmt::Debug for Replica {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        struct DebugHexU64(u64);
-
-        impl core::fmt::Debug for DebugHexU64 {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                write!(f, "{:x}", self.0)
-            }
-        }
-
-        // In the public Debug we just print the ReplicaId to avoid leaking
-        // our internals.
-        //
-        // During development the `Replica::debug()` method (which is public
-        // but hidden from the API) can be used to obtain a more useful
-        // representation.
-        f.debug_tuple("Replica").field(&DebugHexU64(self.id)).finish()
-    }
-}
+// impl core::fmt::Debug for Replica {
+//     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+//         struct DebugHexU64(u64);
+//
+//         impl core::fmt::Debug for DebugHexU64 {
+//             fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+//                 write!(f, "{:x}", self.0)
+//             }
+//         }
+//
+//         // In the public Debug we just print the ReplicaId to avoid leaking
+//         // our internals.
+//         //
+//         // During development the `Replica::debug()` method (which is public
+//         // but hidden from the API) can be used to obtain a more useful
+//         // representation.
+//         f.debug_tuple("Replica").field(&DebugHexU64(self.id)).finish()
+//     }
+// }
 
 pub type LamportTs = u64;
 

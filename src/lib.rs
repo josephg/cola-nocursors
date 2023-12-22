@@ -125,6 +125,7 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 extern crate alloc;
+extern crate core;
 
 mod backlog;
 mod crdt_edit;

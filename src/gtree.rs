@@ -204,7 +204,7 @@ impl<L> LeafIdx<L> {
 /// It's called a "cursor" because it identifies a particular position between
 /// two leaf nodes in the tree, much like a line cursor identifies a position
 /// between two characters in a text editor.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 #[cfg_attr(feature = "encode", derive(serde::Serialize, serde::Deserialize))]
 struct Cursor<L: Leaf> {
     /// The index of the leaf node that comes *after* the cursor. There always
@@ -597,7 +597,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
 
         self.cursor =
-            Some(Cursor::new(leaf_idx, new_cursor_offset, idx_in_parent));
+            Some(Cursor::new(leaf_idx, new_cursor_offset.clone(), idx_in_parent));
 
         (new_cursor_offset, leaf_idx)
     }
@@ -898,7 +898,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let idx_in_parent = self.idx_of_leaf_in_parent(inserted_idx);
 
         self.cursor =
-            Some(Cursor::new(inserted_idx, new_cursor_offset, idx_in_parent));
+            Some(Cursor::new(inserted_idx, new_cursor_offset.clone(), idx_in_parent));
 
         (new_cursor_offset, inserted_idx, split_idx)
     }
@@ -3125,7 +3125,7 @@ mod debug {
     //!
     //! Placed here to avoid cluttering the main module.
 
-    use core::fmt::{Formatter, Result as FmtResult};
+    use core::fmt::{Formatter, Pointer, Result as FmtResult};
 
     use super::*;
 
@@ -3168,7 +3168,14 @@ mod debug {
 
     impl<const ARITY: usize, L: Leaf> Debug for Gtree<ARITY, L> {
         fn fmt(&self, f: &mut Formatter) -> FmtResult {
-            self.debug_as_btree().fmt(f)
+            f.debug_struct("Gtree")
+                .field("inodes", &self.inodes)
+                .field("lnodes", &self.lnodes)
+                .field("root_idx", &self.root_idx)
+                .field("cursor", &self.cursor)
+                .field("tree", &self.debug_as_btree())
+                .finish()
+            // self.debug_as_btree().fmt(f)
         }
     }
 
