@@ -1052,3 +1052,13 @@ mod debug {
         }
     }
 }
+
+#[test]
+fn asdf() {
+    let mut r = Replica::new(1, 0);
+    dbg!(&r);
+    drop(r.inserted(0, 10));
+    drop(r.inserted(0, 1));
+    // drop(r.deleted(3..5));
+    dbg!(&r);
+}

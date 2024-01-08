@@ -3,7 +3,10 @@ use core::marker::PhantomData;
 use core::mem;
 use core::ops::{Add, AddAssign, Sub, SubAssign};
 
-use crate::{Range, RangeExt};
+pub use debug::{DebugAsBtree, DebugAsSelf};
+pub use iter::{Leaves, Siblings};
+
+use crate::{Range};
 
 /// A trait used to express the length of a node.
 pub trait Length:
@@ -114,19 +117,19 @@ pub(crate) struct Gtree<const ARITY: usize, L: Leaf> {
     /// Gtree.
     root_idx: InodeIdx,
 
-    /// The position of the last insertion/deletion.
-    ///
-    /// Saving this allows to make repeated edits at the same cursor position
-    /// fast af.
-    #[cfg_attr(
-        feature = "encode",
-        serde(bound(serialize = "L::Length: serde::Serialize"))
-    )]
-    #[cfg_attr(
-        feature = "encode",
-        serde(bound(deserialize = "L::Length: serde::Deserialize<'de>"))
-    )]
-    cursor: Option<Cursor<L>>,
+    // /// The position of the last insertion/deletion.
+    // ///
+    // /// Saving this allows to make repeated edits at the same cursor position
+    // /// fast af.
+    // #[cfg_attr(
+    //     feature = "encode",
+    //     serde(bound(serialize = "L::Length: serde::Serialize"))
+    // )]
+    // #[cfg_attr(
+    //     feature = "encode",
+    //     serde(bound(deserialize = "L::Length: serde::Deserialize<'de>"))
+    // )]
+    // cursor: Option<Cursor<L>>,
 }
 
 /// A newtype struct around the index of an internal node of the Gtree.
@@ -229,16 +232,16 @@ impl<L: Leaf> Clone for Cursor<L> {
     }
 }
 
-impl<L: Leaf> Cursor<L> {
-    #[inline]
-    fn new(
-        leaf_idx: LeafIdx<L>,
-        offset: L::Length,
-        child_idx: ChildIdx,
-    ) -> Self {
-        Self { leaf_idx, offset, child_idx }
-    }
-}
+// impl<L: Leaf> Cursor<L> {
+//     #[inline]
+//     fn new(
+//         leaf_idx: LeafIdx<L>,
+//         offset: L::Length,
+//         child_idx: ChildIdx,
+//     ) -> Self {
+//         Self { leaf_idx, offset, child_idx }
+//     }
+// }
 
 // Public API.
 impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
@@ -260,26 +263,19 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         append_to: LeafIdx<L>,
         leaf: L,
     ) -> L::Length {
-        let (leaf_offset, idx_in_parent) = self
-            .cursor
-            .and_then(|cursor| {
-                if append_to == cursor.leaf_idx {
-                    Some((cursor.offset, cursor.child_idx))
-                } else {
-                    None
-                }
-            })
-            .unwrap_or_else(|| {
-                let offset = self.offset_of_leaf(append_to);
-                let idx_in_parent = self.idx_of_leaf_in_parent(append_to);
-                (offset, idx_in_parent)
-            });
+        let leaf_offset = self.offset_of_leaf(append_to);
+        // let (leaf_offset, _idx_in_parent) = None
+        //     .unwrap_or_else(|| {
+        //         let offset = self.offset_of_leaf(append_to);
+        //         let idx_in_parent = self.idx_of_leaf_in_parent(append_to);
+        //         (offset, idx_in_parent)
+        //     });
 
         self.with_leaf_mut(append_to, |append_to| {
             append_to.append(leaf).unwrap()
         });
 
-        self.cursor = Some(Cursor::new(append_to, leaf_offset, idx_in_parent));
+        // self.cursor = Some(Cursor::new(append_to, leaf_offset, idx_in_parent));
 
         leaf_offset
     }
@@ -306,14 +302,14 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         recursively_assert_inode_invariants(self, self.root_idx);
 
-        if let Some(cursor) = self.cursor {
-            assert_eq!(self.offset_of_leaf(cursor.leaf_idx), cursor.offset);
-
-            assert_eq!(
-                self.idx_of_leaf_in_parent(cursor.leaf_idx),
-                cursor.child_idx
-            );
-        }
+        // if let Some(cursor) = self.cursor {
+        //     assert_eq!(self.offset_of_leaf(cursor.leaf_idx), cursor.offset);
+        //
+        //     assert_eq!(
+        //         self.idx_of_leaf_in_parent(cursor.leaf_idx),
+        //         cursor.child_idx
+        //     );
+        // }
     }
 
     /// Returns the average number of children per internal node.
@@ -423,35 +419,35 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         DelFrom: FnOnce(&mut L, L::Length) -> Option<L>,
         DelUpTo: FnOnce(&mut L, L::Length) -> Option<L>,
     {
-        if let Some(cursor) = self.cursor {
-            let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
-
-            if (cursor.offset..cursor_end).contains_range(range) {
-                return self.delete_range_in_leaf(
-                    cursor.leaf_idx,
-                    cursor.offset,
-                    cursor.child_idx,
-                    range - cursor.offset,
-                    delete_range,
-                );
-            }
-
-            if let Some((leaf_idx, child_idx)) =
-                self.next_non_empty_sibling(cursor.leaf_idx, cursor.child_idx)
-            {
-                let next_len = self.leaf(leaf_idx).len();
-
-                if (cursor_end..cursor_end + next_len).contains_range(range) {
-                    return self.delete_range_in_leaf(
-                        leaf_idx,
-                        cursor_end,
-                        child_idx,
-                        range - cursor_end,
-                        delete_range,
-                    );
-                }
-            }
-        }
+        // if let Some(cursor) = self.cursor {
+        //     let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
+        //
+        //     if (cursor.offset..cursor_end).contains_range(range) {
+        //         return self.delete_range_in_leaf(
+        //             cursor.leaf_idx,
+        //             cursor.offset,
+        //             cursor.child_idx,
+        //             range - cursor.offset,
+        //             delete_range,
+        //         );
+        //     }
+        //
+        //     if let Some((leaf_idx, child_idx)) =
+        //         self.next_non_empty_sibling(cursor.leaf_idx, cursor.child_idx)
+        //     {
+        //         let next_len = self.leaf(leaf_idx).len();
+        //
+        //         if (cursor_end..cursor_end + next_len).contains_range(range) {
+        //             return self.delete_range_in_leaf(
+        //                 leaf_idx,
+        //                 cursor_end,
+        //                 child_idx,
+        //                 range - cursor_end,
+        //                 delete_range,
+        //             );
+        //         }
+        //     }
+        // }
 
         self.delete_range(range, delete_range, delete_from, delete_up_to)
     }
@@ -512,7 +508,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
 
         let inodes = vec![inode];
 
-        Self { inodes, lnodes, root_idx: InodeIdx(0), cursor: None }
+        Self { inodes, lnodes, root_idx: InodeIdx(0) }
     }
 
     /// Returns a shared reference to the leaf node at the given index.
@@ -547,19 +543,19 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     where
         F: FnOnce(&mut L, L::Length) -> (Option<L>, Option<L>),
     {
-        if let Some(cursor) = self.cursor {
-            let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
-
-            if offset > cursor.offset && offset <= cursor_end {
-                return self.insert_at_leaf(
-                    cursor.leaf_idx,
-                    cursor.offset,
-                    cursor.child_idx,
-                    offset - cursor.offset,
-                    insert_with,
-                );
-            }
-        }
+        // if let Some(cursor) = self.cursor {
+        //     let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
+        //
+        //     if offset > cursor.offset && offset <= cursor_end {
+        //         return self.insert_at_leaf(
+        //             cursor.leaf_idx,
+        //             cursor.offset,
+        //             cursor.child_idx,
+        //             offset - cursor.offset,
+        //             insert_with,
+        //         );
+        //     }
+        // }
 
         self.insert_at_offset(offset, insert_with)
     }
@@ -574,15 +570,15 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         leaf: L,
         after_leaf: LeafIdx<L>,
     ) -> (L::Length, LeafIdx<L>) {
-        let (leaf_offset, idx_in_parent) = self
-            .cursor
-            .and_then(|cursor| {
-                if after_leaf == cursor.leaf_idx {
-                    Some((cursor.offset, cursor.child_idx))
-                } else {
-                    None
-                }
-            })
+        let (leaf_offset, idx_in_parent) = None //self
+            // .cursor
+            // .and_then(|cursor| {
+            //     if after_leaf == cursor.leaf_idx {
+            //         Some((cursor.offset, cursor.child_idx))
+            //     } else {
+            //         None
+            //     }
+            // })
             .unwrap_or_else(|| {
                 let offset = self.offset_of_leaf(after_leaf);
                 let idx_in_parent = self.idx_of_leaf_in_parent(after_leaf);
@@ -594,10 +590,10 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         let leaf_idx =
             self.insert_leaf_after_leaf(after_leaf, idx_in_parent, leaf);
 
-        let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
+        // let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
 
-        self.cursor =
-            Some(Cursor::new(leaf_idx, new_cursor_offset.clone(), idx_in_parent));
+        // self.cursor =
+        //     Some(Cursor::new(leaf_idx, new_cursor_offset.clone(), idx_in_parent));
 
         (new_cursor_offset, leaf_idx)
     }
@@ -609,13 +605,13 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
         &self,
         offset: L::Length,
     ) -> (LeafIdx<L>, L::Length) {
-        if let Some(cursor) = self.cursor {
-            let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
-
-            if offset > cursor.offset && offset <= cursor_end {
-                return (cursor.leaf_idx, cursor.offset);
-            }
-        }
+        // if let Some(cursor) = self.cursor {
+        //     let cursor_end = cursor.offset + self.leaf(cursor.leaf_idx).len();
+        //
+        //     if offset > cursor.offset && offset <= cursor_end {
+        //         return (cursor.leaf_idx, cursor.offset);
+        //     }
+        // }
 
         let mut leaf_offset = L::Length::zero();
 
@@ -719,11 +715,11 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// Returns the offset of the given leaf from the start of the Gtree.
     #[inline]
     pub fn offset_of_leaf(&self, leaf_idx: LeafIdx<L>) -> L::Length {
-        if let Some(cursor) = self.cursor {
-            if leaf_idx == cursor.leaf_idx {
-                return cursor.offset;
-            }
-        }
+        // if let Some(cursor) = self.cursor {
+        //     if leaf_idx == cursor.leaf_idx {
+        //         return cursor.offset;
+        //     }
+        // }
 
         let mut offset = L::Length::zero();
 
@@ -745,7 +741,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     pub fn prepend(&mut self, leaf: L) -> LeafIdx<L> {
         let first_leaf_idx = self.first_leaf_idx();
         let leaf_idx = self.insert_leaf_before_leaf(first_leaf_idx, 0, leaf);
-        self.cursor = Some(Cursor::new(leaf_idx, L::Length::zero(), 0));
+        // self.cursor = Some(Cursor::new(leaf_idx, L::Length::zero(), 0));
         leaf_idx
     }
 
@@ -798,7 +794,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     /// Removes the cursor.
     #[inline]
     pub fn remove_cursor(&mut self) {
-        self.cursor = None;
+        // self.cursor = None;
     }
 
     /// Returns an iterator over the siblings of the leaf at the given index.
@@ -858,15 +854,15 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     where
         F: FnOnce(&mut L) -> (L, L),
     {
-        let (leaf_offset, idx_in_parent) = self
-            .cursor
-            .and_then(|cursor| {
-                if leaf_idx == cursor.leaf_idx {
-                    Some((cursor.offset, cursor.child_idx))
-                } else {
-                    None
-                }
-            })
+        let (leaf_offset, idx_in_parent) = None//self
+            // .cursor
+            // .and_then(|cursor| {
+            //     if leaf_idx == cursor.leaf_idx {
+            //         Some((cursor.offset, cursor.child_idx))
+            //     } else {
+            //         None
+            //     }
+            // })
             .unwrap_or_else(|| {
                 let offset = self.offset_of_leaf(leaf_idx);
                 let idx_in_parent = self.idx_of_leaf_in_parent(leaf_idx);
@@ -895,10 +891,10 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             split_leaf,
         );
 
-        let idx_in_parent = self.idx_of_leaf_in_parent(inserted_idx);
+        // let idx_in_parent = self.idx_of_leaf_in_parent(inserted_idx);
 
-        self.cursor =
-            Some(Cursor::new(inserted_idx, new_cursor_offset.clone(), idx_in_parent));
+        // self.cursor =
+        //     Some(Cursor::new(inserted_idx, new_cursor_offset.clone(), idx_in_parent));
 
         (new_cursor_offset, inserted_idx, split_idx)
     }
@@ -1287,14 +1283,14 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                         second,
                     );
 
-                let idx_in_parent = self
-                    .update_child_idx_after_inserting_after(
-                        parent_idx,
-                        idx_in_parent,
-                    );
+                // let idx_in_parent = self
+                //     .update_child_idx_after_inserting_after(
+                //         parent_idx,
+                //         idx_in_parent,
+                //     );
 
-                self.cursor =
-                    Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent));
+                // self.cursor =
+                //     Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent));
 
                 (Some(first_idx), Some(second_idx))
             },
@@ -1321,14 +1317,14 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                         )),
                     };
 
-                let idx_in_parent = self
-                    .update_child_idx_after_inserting_after(
-                        parent_idx,
-                        idx_in_parent,
-                    );
+                // let idx_in_parent = self
+                //     .update_child_idx_after_inserting_after(
+                //         parent_idx,
+                //         idx_in_parent,
+                //     );
 
-                self.cursor =
-                    Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent));
+                // self.cursor =
+                //     Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent));
 
                 (inserted_idx, None)
             },
@@ -1372,22 +1368,22 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
                     )),
                 };
 
-                let idx_in_parent = self
-                    .update_child_idx_after_inserting_after(
-                        parent_idx,
-                        idx_in_parent,
-                    );
+                // let idx_in_parent = self
+                //     .update_child_idx_after_inserting_after(
+                //         parent_idx,
+                //         idx_in_parent,
+                //     );
 
-                self.cursor = self
-                    .prev_non_empty_sibling(leaf_idx, idx_in_parent)
-                    .map(|(previous_idx, child_idx)| {
-                        let previous_len = self.leaf(previous_idx).len();
-                        Cursor::new(
-                            previous_idx,
-                            leaf_offset - previous_len,
-                            child_idx,
-                        )
-                    });
+                // self.cursor = self
+                //     .prev_non_empty_sibling(leaf_idx, idx_in_parent)
+                //     .map(|(previous_idx, child_idx)| {
+                //         let previous_len = self.leaf(previous_idx).len();
+                //         Cursor::new(
+                //             previous_idx,
+                //             leaf_offset - previous_len,
+                //             child_idx,
+                //         )
+                //     });
 
                 (inserted_idx, None)
             },
@@ -1395,16 +1391,16 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             (None, None) => {
                 debug_assert!(self.leaf(leaf_idx).is_empty());
 
-                self.cursor = self
-                    .prev_non_empty_sibling(leaf_idx, idx_in_parent)
-                    .map(|(previous_idx, child_idx)| {
-                        let previous_len = self.leaf(previous_idx).len();
-                        Cursor::new(
-                            previous_idx,
-                            leaf_offset - previous_len,
-                            child_idx,
-                        )
-                    });
+                // self.cursor = self
+                //     .prev_non_empty_sibling(leaf_idx, idx_in_parent)
+                //     .map(|(previous_idx, child_idx)| {
+                //         let previous_len = self.leaf(previous_idx).len();
+                //         Cursor::new(
+                //             previous_idx,
+                //             leaf_offset - previous_len,
+                //             child_idx,
+                //         )
+                //     });
 
                 (None, None)
             },
@@ -1491,7 +1487,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     {
         debug_assert!(self.child_containing_range(idx, range).is_none());
 
-        self.cursor = None;
+        // self.cursor = None;
 
         let old_len = self.inode(idx).len();
 
@@ -1587,7 +1583,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
     fn insert_at_leaf<F>(
         &mut self,
         leaf_idx: LeafIdx<L>,
-        leaf_offset: L::Length,
+        _leaf_offset: L::Length,
         idx_in_parent: ChildIdx,
         insert_at_offset: L::Length,
         insert_with: F,
@@ -1639,21 +1635,21 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             _ => unreachable!(),
         };
 
-        self.cursor = if let Some(first_idx) = first_idx {
-            let idx_in_parent = self.update_child_idx_after_inserting_after(
-                parent_idx,
-                idx_in_parent + 1,
-            );
-
-            Some(Cursor::new(first_idx, leaf_offset + new_len, idx_in_parent))
-        } else {
-            let idx_in_parent = self.update_child_idx_after_inserting_after(
-                parent_idx,
-                idx_in_parent,
-            );
-
-            Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent))
-        };
+        // self.cursor = if let Some(first_idx) = first_idx {
+        //     let idx_in_parent = self.update_child_idx_after_inserting_after(
+        //         parent_idx,
+        //         idx_in_parent + 1,
+        //     );
+        //
+        //     Some(Cursor::new(first_idx, leaf_offset + new_len, idx_in_parent))
+        // } else {
+        //     let idx_in_parent = self.update_child_idx_after_inserting_after(
+        //         parent_idx,
+        //         idx_in_parent,
+        //     );
+        //
+        //     Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent))
+        // };
 
         (first_idx, second_idx)
     }
@@ -2226,7 +2222,7 @@ impl<const ARITY: usize, L: Leaf> Gtree<ARITY, L> {
             inodes: Vec::new(),
             lnodes: Vec::new(),
             root_idx: InodeIdx::dangling(),
-            cursor: None,
+            // cursor: None,
         }
     }
 
@@ -2809,28 +2805,28 @@ mod insert {
                         insert_with(leaf, at_offset - leaf_offset)
                     });
 
-                gtree.cursor = if let Some(idx) = inserted_idx {
-                    let leaf_len = gtree.leaf(leaf_idx).len();
-
-                    let idx_in_parent = gtree
-                        .update_child_idx_after_inserting_after(
-                            in_inode,
-                            child_idx + 1,
-                        );
-
-                    Some(Cursor::new(
-                        idx,
-                        leaf_offset + leaf_len,
-                        idx_in_parent,
-                    ))
-                } else {
-                    let idx_in_parent = gtree
-                        .update_child_idx_after_inserting_after(
-                            in_inode, child_idx,
-                        );
-
-                    Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent))
-                };
+                // gtree.cursor = if let Some(idx) = inserted_idx {
+                //     let leaf_len = gtree.leaf(leaf_idx).len();
+                //
+                //     let idx_in_parent = gtree
+                //         .update_child_idx_after_inserting_after(
+                //             in_inode,
+                //             child_idx + 1,
+                //         );
+                //
+                //     Some(Cursor::new(
+                //         idx,
+                //         leaf_offset + leaf_len,
+                //         idx_in_parent,
+                //     ))
+                // } else {
+                //     let idx_in_parent = gtree
+                //         .update_child_idx_after_inserting_after(
+                //             in_inode, child_idx,
+                //         );
+                //
+                //     Some(Cursor::new(leaf_idx, leaf_offset, idx_in_parent))
+                // };
 
                 ((inserted_idx, split_idx), split)
             },
@@ -3118,14 +3114,12 @@ mod delete {
     }
 }
 
-pub use debug::{DebugAsBtree, DebugAsSelf};
-
 mod debug {
     //! Debug implementations for types in the outer module.
     //!
     //! Placed here to avoid cluttering the main module.
 
-    use core::fmt::{Formatter, Pointer, Result as FmtResult};
+    use core::fmt::{Formatter, Result as FmtResult};
 
     use super::*;
 
@@ -3172,7 +3166,7 @@ mod debug {
                 .field("inodes", &self.inodes)
                 .field("lnodes", &self.lnodes)
                 .field("root_idx", &self.root_idx)
-                .field("cursor", &self.cursor)
+                // .field("cursor", &self.cursor)
                 .field("tree", &self.debug_as_btree())
                 .finish()
             // self.debug_as_btree().fmt(f)
@@ -3323,15 +3317,15 @@ mod debug {
 
                     Either::Leaf(leaf_idxs) => {
                         for (i, &leaf_idx) in leaf_idxs.iter().enumerate() {
-                            if let Some(cursor) = gtree.cursor {
-                                if cursor.leaf_idx == leaf_idx {
-                                    writeln!(
-                                        f,
-                                        "{}│\n{}│ -> cursor @ {:?}\n{}│",
-                                        shifts, shifts, cursor.offset, shifts,
-                                    )?;
-                                }
-                            }
+                            // if let Some(cursor) = gtree.cursor {
+                            //     if cursor.leaf_idx == leaf_idx {
+                            //         writeln!(
+                            //             f,
+                            //             "{}│\n{}│ -> cursor @ {:?}\n{}│",
+                            //             shifts, shifts, cursor.offset, shifts,
+                            //         )?;
+                            //     }
+                            // }
 
                             let ident = ident(i);
                             let lnode = gtree.lnode(leaf_idx);
@@ -3362,8 +3356,6 @@ mod debug {
         }
     }
 }
-
-pub use iter::{Leaves, Siblings};
 
 mod iter {
     use super::*;
@@ -3485,8 +3477,8 @@ mod iter {
 
 #[cfg(feature = "encode")]
 mod inode_serde {
-    use serde::ser::SerializeMap;
     use serde::{de, ser};
+    use serde::ser::SerializeMap;
 
     use super::*;
 
