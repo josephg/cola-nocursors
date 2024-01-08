@@ -295,7 +295,7 @@ impl Replica {
             });
         }
 
-        if encoded.checksum() != &checksum(encoded.bytes()) {
+        if encoded.checksum() != checksum_array(encoded.bytes()) {
             return Err(DecodeError::ChecksumFailed);
         }
 
@@ -902,7 +902,7 @@ mod encode {
         (RunTree, LamportClock, VersionMap, DeletionMap, Backlog);
 
     #[inline]
-    pub(super) fn encode(replica: &Replica) -> Vec<u8> {
+    pub(super) fn encode(replica: &Replica) -> Box<[u8]> {
         let mut encoded = Vec::new();
 
         encode_field(&mut encoded, &replica.run_tree);
@@ -911,7 +911,7 @@ mod encode {
         encode_field(&mut encoded, &replica.deletion_map);
         encode_field(&mut encoded, &replica.backlog);
 
-        encoded
+        encoded.into_boxed_slice()
     }
 
     #[inline]
@@ -934,13 +934,20 @@ mod encode {
     where
         T: ser::Serialize,
     {
-        let field_bytes = serialize(field);
+        // Make room for the length of the encoded field.
+        let len_bytes = [0; 8];
+        buf.extend_from_slice(&len_bytes);
+
+        let len_before = buf.len();
+        serialize(buf, field);
+        let len_after = buf.len();
+
         // We convert the usize into a u64 before turning it into a byte array
         // to guarantee that the latter is always 8 bytes long. If we don't the
         // length will vary depending on the architecture.
-        let len_bytes = (field_bytes.len() as u64).to_le_bytes();
-        buf.extend_from_slice(&len_bytes);
-        buf.extend_from_slice(&field_bytes);
+        let len_bytes = ((len_after - len_before) as u64).to_le_bytes();
+
+        buf[len_before - 8..len_before].copy_from_slice(&len_bytes);
     }
 
     #[inline]
@@ -969,11 +976,11 @@ mod encode {
     }
 
     #[inline]
-    fn serialize<T>(value: &T) -> Vec<u8>
+    fn serialize<T>(buf: &mut Vec<u8>, value: &T)
     where
         T: ser::Serialize,
     {
-        bincode::serialize(value).expect("failed to serialize")
+        bincode::serialize_into(buf, value).expect("failed to serialize")
     }
 
     #[inline]

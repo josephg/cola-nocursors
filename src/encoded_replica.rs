@@ -2,7 +2,10 @@ use sha2::{Digest, Sha256};
 
 use crate::*;
 
-pub type Checksum = Vec<u8>;
+/// We use this instead of a `Vec<u8>` because it's 1/3 the size on the stack.
+pub(crate) type Checksum = Box<ChecksumArray>;
+
+pub(crate) type ChecksumArray = [u8; 32];
 
 /// A [`Replica`] encoded into a compact binary format suitable for
 /// transmission over the network.
@@ -17,25 +20,48 @@ pub type Checksum = Vec<u8>;
 pub struct EncodedReplica {
     protocol_version: ProtocolVersion,
     checksum: Checksum,
-    bytes: Vec<u8>,
+    bytes: Box<[u8]>,
+}
+
+impl core::fmt::Debug for EncodedReplica {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        struct HexSlice<'a>(&'a [u8]);
+
+        impl<'a> core::fmt::Debug for HexSlice<'a> {
+            fn fmt(
+                &self,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                for byte in self.0 {
+                    write!(f, "{:02x}", byte)?;
+                }
+                Ok(())
+            }
+        }
+
+        f.debug_struct("EncodedReplica")
+            .field("protocol_version", &self.protocol_version)
+            .field("checksum", &HexSlice(self.checksum()))
+            .finish_non_exhaustive()
+    }
 }
 
 impl EncodedReplica {
     #[inline]
     pub(crate) fn bytes(&self) -> &[u8] {
-        self.bytes.as_slice()
+        &*self.bytes
     }
 
     #[inline]
-    pub(crate) fn checksum(&self) -> &Checksum {
-        &self.checksum
+    pub(crate) fn checksum(&self) -> &[u8] {
+        &*self.checksum
     }
 
     #[inline]
     pub(crate) fn new(
         protocol_version: ProtocolVersion,
         checksum: Checksum,
-        bytes: Vec<u8>,
+        bytes: Box<[u8]>,
     ) -> Self {
         Self { protocol_version, checksum, bytes }
     }
@@ -86,7 +112,33 @@ pub enum DecodeError {
     InvalidData,
 }
 
-#[inline]
-pub fn checksum(bytes: &[u8]) -> Checksum {
-    Sha256::digest(bytes)[..].to_vec()
+impl core::fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            DecodeError::ChecksumFailed => f.write_str("checksum failed"),
+
+            DecodeError::DifferentProtocol { encoded_on, decoding_on } => {
+                write!(
+                    f,
+                    "different protocol: encoded on {:?}, decoding on {:?}",
+                    encoded_on, decoding_on
+                )
+            },
+
+            DecodeError::InvalidData => f.write_str("invalid data"),
+        }
+    }
+}
+
+impl std::error::Error for DecodeError {}
+
+#[inline(always)]
+pub(crate) fn checksum(bytes: &[u8]) -> Checksum {
+    Box::new(checksum_array(bytes))
+}
+
+#[inline(always)]
+pub(crate) fn checksum_array(bytes: &[u8]) -> ChecksumArray {
+    let checksum = Sha256::digest(bytes);
+    *checksum.as_ref()
 }
